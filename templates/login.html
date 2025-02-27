@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZaprosBot - вход</title>
+    <link rel="icon" type="image/icon" href="static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="{{ url_for('static', filename='custom.css') }}" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-r from-blue-50 to-indigo-100 font-sans flex items-center justify-center min-h-screen">
+    <div class="bg-white shadow-xl rounded-xl p-8 w-full max-w-md transform hover:scale-105 transition duration-300">
+        <div class="flex justify-center mb-6">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Pinscher Sales Logo" class="h-16 w-auto">
+        </div>
+        <h1 class="text-3xl font-bold text-indigo-700 mb-6 text-center">Вход в систему</h1>
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="mb-4 text-red-600 text-sm text-center bg-red-100 p-2 rounded-lg">
+                    Пожалуйста, введите логин и пароль.
+                </div>
+            {% endif %}
+        {% endwith %}
+        <form method="POST" class="space-y-6">
+            {{ form.hidden_tag() }}
+            <div>{{ form.username.label }} {{ form.username(class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200") }}</div>
+            <div>{{ form.password.label }} {{ form.password(class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200") }}</div>
+            <div>{{ form.submit(class="w-full inline-flex justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-lg shadow-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-200") }}</div>
+        </form>
+    </div>
+</body>
+</html>

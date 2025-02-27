@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZaprosBot - управляй заявками</title>
+    <link rel="icon" type="image/icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="{{ url_for('static', filename='custom.css') }}" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-r from-blue-50 to-indigo-100 font-sans min-h-screen">
+    <div class="container mx-auto p-6">
+        <header class="bg-white shadow-lg rounded-lg p-6 mb-6 flex items-center justify-between">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Pinscher Sales Logo" class="h-12 w-auto">
+            <div class="space-x-4">
+                <a href="{{ url_for('export') }}?table={{ table }}" class="text-indigo-600 hover:text-indigo-800 font-medium">Экспорт</a>
+                <a href="{{ url_for('analytics') }}" class="text-indigo-600 hover:text-indigo-800 font-medium">Аналитика</a>
+                <a href="{{ url_for('settings') }}" class="text-indigo-600 hover:text-indigo-800 font-medium">Настройки</a>
+                <a href="{{ url_for('logout') }}" class="text-indigo-600 hover:text-indigo-800 font-medium">Выйти</a>
+            </div>
+        </header>
+
+        <div class="bg-white shadow-lg rounded-lg p-6 mb-6">
+            <h1 class="text-2xl font-bold text-indigo-700">👋 Хеллоу, май френдс) Это панель управления заявками.</h1>
+            <p class="text-gray-600">Ты можешь использовать фильтр снизу что бы искать заявки</p>
+            <div class="mt-4">
+                <label class="mr-2">Выберите таблицу:</label>
+                <select id="table-switch" onchange="switchTable(this.value)" class="border border-gray-300 p-2 rounded-lg">
+                    <option value="requests" {% if table == 'requests' %}selected{% endif %}>Оригиналы</option>
+                    <option value="electronic_requests" {% if table == 'electronic_requests' %}selected{% endif %}>Электронные</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="overdue" class="bg-red-100 border-l-4 border-red-500 p-4 mb-6 rounded-lg shadow-md" {% if not overdue_count %}style="display: none;"{% endif %}>
+            <p class="text-red-700 font-semibold">⏰ Неотправленных заявок: <span id="overdue_count">{{ overdue_count }}</span></p>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="mb-4 text-red-600 text-sm text-center bg-red-100 p-2 rounded-lg">
+                    {{ messages[0] }}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form id="filter-form" class="mb-6 bg-white shadow-lg rounded-lg p-4 flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4" onsubmit="return applyFilter(event)">
+            <input type="hidden" name="table" id="table" value="{{ table }}">
+            <div class="flex-1">
+                <label for="search" class="block text-sm font-medium text-gray-700">Поиск:</label>
+                <input type="text" name="search" id="search" placeholder="{% if table == 'requests' %}Компания, ФИО или трек-номер{% else %}Компания, ИИН или документы{% endif %}" value="{{ search }}" class="mt-1 w-full border border-gray-300 p-2 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <div class="flex-1">
+                <label for="status" class="block text-sm font-medium text-gray-700">Статус:</label>
+                <select name="status" id="status" class="mt-1 w-full border border-gray-300 p-2 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500">
+                    <option value="" {% if not status %}selected{% endif %}>Все статусы</option>
+                    <option value="Новая" {% if status == 'Новая' %}selected{% endif %}>Новая</option>
+                    <option value="В работе" {% if status == 'В работе' %}selected{% endif %}>В работе</option>
+                    <option value="Отправлено" {% if status == 'Отправлено' %}selected{% endif %}>Отправлено</option>
+                </select>
+            </div>
+            <div class="flex space-x-2 items-end">
+                <button type="submit" class="bg-indigo-600 text-white p-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-200">🔍 Применить</button>
+                <button type="button" onclick="resetFilter()" class="bg-gray-300 text-gray-700 p-2 rounded-lg shadow-md hover:bg-gray-400 transition duration-200">❌ Сбросить</button>
+            </div>
+        </form>
+
+        <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+            <table class="min-w-full stylish-table" id="requests-table">
+                <thead class="bg-indigo-600 text-white" id="table-header">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Дата</th>
+                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Компания</th>
+                        {% if table == 'requests' %}
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">ФИО</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Адрес</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Телефон</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Трек</th>
+                        {% else %}
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">ИИН</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Документы</th>
+                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Способ получения</th>
+                        {% endif %}
+                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Файл</th>
+                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Статус</th>
+                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="requests-tbody" class="bg-white"></tbody>
+            </table>
+        </div>
+
+        <div id="pagination" class="mt-6 flex justify-between items-center">
+            <button id="prev-page" class="bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-200" {% if page <= 1 %}style="visibility: hidden;"{% endif %} onclick="changePage(-1)">⬅️ Предыдущая</button>
+            <div class="text-gray-700">Страница <span id="current-page">{{ page }}</span> из <span id="total-pages">{{ total_pages }}</span></div>
+            <button id="next-page" class="bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-200" {% if page >= total_pages %}style="visibility: hidden;"{% endif %} onclick="changePage(1)">Следующая ➡️</button>
+        </div>
+    </div>
+
+    <div id="trackModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">🚚 Укажи данные для 'Отправлено'</h2>
+            <form id="trackForm" onsubmit="return updateTrackStatus(event)">
+                <input type="hidden" name="request_id" id="trackRequestId">
+                <input type="hidden" name="action" value="status">
+                <input type="hidden" name="status" value="Отправлено">
+                <input type="hidden" name="table" id="trackTable">
+                <div class="mb-4" id="trackNumberDiv">
+                    <label for="trackNumber" class="block text-sm font-medium text-gray-700">Трек-номер:</label>
+                    <input type="text" name="track_number" id="trackNumber" required class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="mb-4" id="attachmentDiv">
+                    <label for="attachment" class="block text-sm font-medium text-gray-700">📎 Файл (PDF, JPEG, PNG, TXT, DOC, DOCX, до 25MB):</label>
+                    <input type="file" name="attachment" id="attachment" accept=".pdf,.jpeg,.jpg,.png,.txt,.doc,.docx" class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" onchange="previewFile(this)">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Текущий файл:</label>
+                    <span id="currentFile" class="text-gray-600"></span>
+                </div>
+                <div class="mb-4" id="previewContainer" style="display: none;">
+                    <label class="block text-sm font-medium text-gray-700">Предпросмотр:</label>
+                    <img id="previewImage" class="mt-2 max-w-full h-auto" style="display: none;">
+                    <iframe id="previewIframe" class="mt-2 w-full h-64" style="display: none;"></iframe>
+                    <p id="previewText" class="mt-2 text-gray-600" style="display: none;"></p>
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeModal()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg shadow-md hover:bg-gray-400 transition duration-200">Отмена</button>
+                    <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-200">✅ Применить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const csrfToken = '{{ csrf_token() }}';
+
+        function updateTableHeader(table) {
+            const header = document.getElementById('table-header');
+            header.innerHTML = '';
+            const row = document.createElement('tr');
+            const commonHeaders = `
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Дата</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Компания</th>
+            `;
+            const requestsHeaders = `
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">ФИО</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Адрес</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Телефон</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Трек</th>
+            `;
+            const electronicHeaders = `
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">ИИН</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Документы</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Способ получения</th>
+            `;
+            const tailHeaders = `
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Файл</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Статус</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider">Действия</th>
+            `;
+            row.innerHTML = commonHeaders + (table === 'requests' ? requestsHeaders : electronicHeaders) + tailHeaders;
+            header.appendChild(row);
+        }
+
+        function renderTable(requests, table) {
+            updateTableHeader(table);
+            const tbody = document.getElementById('requests-tbody');
+            tbody.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            requests.forEach(req => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-indigo-50 transition duration-150';
+                if (table === 'requests') {
+                    row.innerHTML = `
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.submission_date || ''}">${req.submission_date || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.company || ''}">${req.company || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.name || ''}">${req.name || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.address || ''}">${req.address || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.contact_number || ''}">${req.contact_number || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.track_number || 'Нет'}">${req.track_number || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate">
+                            ${req.attachment ? `<a href="/static/uploads/${req.attachment}" target="_blank" class="text-indigo-600 hover:text-indigo-800" title="${req.attachment}">📎</a>` : '<span title="Нет">Нет</span>'}
+                        </td>
+                        <td class="px-4 py-2 text-sm ${req.status === 'Новая' ? 'text-red-600' : req.status === 'В работе' ? 'text-yellow-600' : 'text-green-600'} font-semibold">
+                            ${req.status || 'Нет'}
+                            <div class="flex space-x-1 mt-1">
+                                ${req.status !== 'В работе' ? `
+                                    <form method="POST" onsubmit="return updateStatus(event, this)">
+                                        <input type="hidden" name="request_id" value="${req.id}">
+                                        <input type="hidden" name="action" value="status">
+                                        <input type="hidden" name="status" value="В работе">
+                                        <input type="hidden" name="table" value="requests">
+                                        <button type="submit" class="bg-yellow-100 text-yellow-600 px-2 py-1 rounded-lg hover:bg-yellow-200 transition duration-200" title="Взять в работу">⚙️</button>
+                                    </form>
+                                ` : ''}
+                                ${req.status !== 'Отправлено' ? `
+                                    <button onclick="showTrackModal('${req.id}', '${req.track_number || ''}', '${req.attachment || ''}', 'requests')" class="bg-green-100 text-green-600 px-2 py-1 rounded-lg hover:bg-green-200 transition duration-200" title="Отправить">🚚</button>
+                                ` : ''}
+                            </div>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-gray-900">
+                            <form method="POST" onsubmit="return updateStatus(event, this)">
+                                <input type="hidden" name="request_id" value="${req.id}">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="table" value="requests">
+                                <button type="submit" class="bg-red-600 text-white px-2 py-1 rounded-lg shadow-md hover:bg-red-700 transition duration-200" title="Удалить">🗑️</button>
+                            </form>
+                        </td>
+                    `;
+                } else {
+                    const showAttachment = req.delivery_method === 'В этой переписке';
+                    row.innerHTML = `
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.submission_date || ''}">${req.submission_date || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.company || ''}">${req.company || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.iin || 'Нет'}">${req.iin || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.documents || 'Нет'}">${req.documents || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate" title="${req.delivery_method || 'Нет'}">${req.delivery_method || 'Нет'}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 truncate">
+                            ${req.attachment && showAttachment ? `<a href="/static/uploads/${req.attachment}" target="_blank" class="text-indigo-600 hover:text-indigo-800" title="${req.attachment}">📎</a>` : '<span title="Нет">Нет</span>'}
+                        </td>
+                        <td class="px-4 py-2 text-sm ${req.status === 'Новая' ? 'text-red-600' : req.status === 'В работе' ? 'text-yellow-600' : 'text-green-600'} font-semibold">
+                            ${req.status || 'Нет'}
+                            <div class="flex space-x-1 mt-1">
+                                ${req.status !== 'В работе' ? `
+                                    <form method="POST" onsubmit="return updateStatus(event, this)">
+                                        <input type="hidden" name="request_id" value="${req.id}">
+                                        <input type="hidden" name="action" value="status">
+                                        <input type="hidden" name="status" value="В работе">
+                                        <input type="hidden" name="table" value="electronic_requests">
+                                        <button type="submit" class="bg-yellow-100 text-yellow-600 px-2 py-1 rounded-lg hover:bg-yellow-200 transition duration-200" title="Взять в работу">⚙️</button>
+                                    </form>
+                                ` : ''}
+                                ${req.status !== 'Отправлено' ? `
+                                    <button onclick="showTrackModal('${req.id}', '', '${req.attachment || ''}', 'electronic_requests', '${req.delivery_method || ''}')" class="bg-green-100 text-green-600 px-2 py-1 rounded-lg hover:bg-green-200 transition duration-200" title="Отправить">🚚</button>
+                                ` : ''}
+                            </div>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-gray-900">
+                            <form method="POST" onsubmit="return updateStatus(event, this)">
+                                <input type="hidden" name="request_id" value="${req.id}">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="table" value="electronic_requests">
+                                <button type="submit" class="bg-red-600 text-white px-2 py-1 rounded-lg shadow-md hover:bg-red-700 transition duration-200" title="Удалить">🗑️</button>
+                            </form>
+                        </td>
+                    `;
+                }
+                fragment.appendChild(row);
+            });
+            tbody.appendChild(fragment);
+            if (requests.length === 0) {
+                const emptyRow = document.createElement('tr');
+                emptyRow.innerHTML = `<td colspan="${table === 'requests' ? 9 : 8}" class="px-4 py-2 text-sm text-gray-900 text-center">Нет данных</td>`;
+                fragment.appendChild(emptyRow);
+                tbody.appendChild(fragment);
+            }
+        }
+
+        const initialRequests = {{ requests | tojson | safe }};
+        const initialTable = "{{ table }}";
+        renderTable(initialRequests, initialTable);
+
+        function applyFilter(event, pageChange = 0) {
+            event.preventDefault();
+            const form = document.getElementById('filter-form');
+            const formData = new FormData(form);
+            const currentPage = parseInt(document.getElementById('current-page').textContent);
+            const newPage = currentPage + pageChange;
+            fetch('/filter_requests?page=' + newPage, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || `Ошибка сервера: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    renderTable(data.requests, data.table);
+                    document.getElementById('overdue_count').textContent = data.overdue_count;
+                    document.getElementById('overdue').style.display = data.overdue_count > 0 ? 'block' : 'none';
+                    document.getElementById('current-page').textContent = data.page;
+                    document.getElementById('total-pages').textContent = data.total_pages;
+                    const prevPage = document.getElementById('prev-page');
+                    const nextPage = document.getElementById('next-page');
+                    prevPage.style.visibility = data.page > 1 ? 'visible' : 'hidden';
+                    nextPage.style.visibility = data.page < data.total_pages ? 'visible' : 'hidden';
+                    document.getElementById('table').value = data.table;
+                    document.getElementById('search').placeholder = data.table === 'requests' ? 'Компания, ФИО или трек-номер' : 'Компания, ИИН или документы';
+                } else {
+                    alert("Ошибка фильтрации: " + (data.error || "Неизвестная ошибка"));
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                alert("Произошла ошибка при загрузке данных: " + error.message);
+            });
+            return false;
+        }
+
+        function resetFilter() {
+            const form = document.getElementById('filter-form');
+            form.reset();
+            applyFilter({ preventDefault: () => {} });
+        }
+
+        function changePage(delta) {
+            applyFilter({ preventDefault: () => {} }, delta);
+        }
+
+        function switchTable(table) {
+            document.getElementById('table').value = table;
+            applyFilter({ preventDefault: () => {} });
+        }
+
+        function updateStatus(event, form) {
+            event.preventDefault();
+            if (form.querySelector('input[name="action"]').value === 'delete' && !confirm('Удалить заявку?')) {
+                return false;
+            }
+            const formData = new FormData(form);
+            const page = document.getElementById('current-page').textContent;
+            const search = document.getElementById('search').value;
+            const status = document.getElementById('status').value;
+            fetch('/update_status?page=' + page + '&search=' + encodeURIComponent(search) + '&status=' + encodeURIComponent(status), {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || `Ошибка сервера: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    renderTable(data.requests, formData.get('table'));
+                    document.getElementById('overdue_count').textContent = data.overdue_count;
+                    document.getElementById('overdue').style.display = data.overdue_count > 0 ? 'block' : 'none';
+                    document.getElementById('current-page').textContent = data.page;
+                    document.getElementById('total-pages').textContent = data.total_pages;
+                    const prevPage = document.getElementById('prev-page');
+                    const nextPage = document.getElementById('next-page');
+                    prevPage.style.visibility = data.page > 1 ? 'visible' : 'hidden';
+                    nextPage.style.visibility = data.page < data.total_pages ? 'visible' : 'hidden';
+                } else {
+                    alert(data.message || 'Ошибка обновления');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                alert("Произошла ошибка: " + error.message);
+            });
+            return false;
+        }
+
+        function updateTrackStatus(event) {
+            event.preventDefault();
+            const form = document.getElementById('trackForm');
+            const formData = new FormData(form);
+            const page = document.getElementById('current-page').textContent;
+            const search = document.getElementById('search').value;
+            const status = document.getElementById('status').value;
+            fetch('/update_status?page=' + page + '&search=' + encodeURIComponent(search) + '&status=' + encodeURIComponent(status), {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || `Ошибка сервера: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    renderTable(data.requests, formData.get('table'));
+                    document.getElementById('overdue_count').textContent = data.overdue_count;
+                    document.getElementById('overdue').style.display = data.overdue_count > 0 ? 'block' : 'none';
+                    document.getElementById('current-page').textContent = data.page;
+                    document.getElementById('total-pages').textContent = data.total_pages;
+                    const prevPage = document.getElementById('prev-page');
+                    const nextPage = document.getElementById('next-page');
+                    prevPage.style.visibility = data.page > 1 ? 'visible' : 'hidden';
+                    nextPage.style.visibility = data.page < data.total_pages ? 'visible' : 'hidden';
+                    closeModal();
+                } else {
+                    alert(data.message || 'Ошибка обновления');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                alert("Произошла ошибка: " + error.message);
+            });
+            return false;
+        }
+
+        function showTrackModal(requestId, currentTrack, currentAttachment, table, deliveryMethod = '') {
+            document.getElementById('trackModal').classList.remove('hidden');
+            document.getElementById('trackRequestId').value = requestId;
+            document.getElementById('trackTable').value = table;
+            document.getElementById('trackNumber').value = currentTrack || '';
+            document.getElementById('currentFile').textContent = currentAttachment || 'Нет';
+            const trackNumberDiv = document.getElementById('trackNumberDiv');
+            const attachmentDiv = document.getElementById('attachmentDiv');
+            const previewContainer = document.getElementById('previewContainer');
+            const previewImage = document.getElementById('previewImage');
+            const previewIframe = document.getElementById('previewIframe');
+            const previewText = document.getElementById('previewText');
+            previewContainer.style.display = 'none';
+            previewImage.style.display = 'none';
+            previewIframe.style.display = 'none';
+            previewText.style.display = 'none';
+
+            if (table === 'requests') {
+                trackNumberDiv.style.display = 'block';
+                attachmentDiv.style.display = 'block';
+                document.getElementById('trackNumber').required = true;
+                document.getElementById('attachment').required = false;
+            } else if (deliveryMethod === 'ЭДО') {
+                trackNumberDiv.style.display = 'none';
+                attachmentDiv.style.display = 'none';
+                document.getElementById('trackNumber').required = false;
+                document.getElementById('attachment').required = false;
+            } else {  // В этой переписке
+                trackNumberDiv.style.display = 'none';
+                attachmentDiv.style.display = 'block';
+                document.getElementById('trackNumber').required = false;
+                document.getElementById('attachment').required = true;
+            }
+
+            if (currentAttachment) {
+                const ext = currentAttachment.split('.').pop().toLowerCase();
+                previewContainer.style.display = 'block';
+                if (['jpeg', 'jpg', 'png'].includes(ext)) {
+                    previewImage.src = `/static/uploads/${currentAttachment}`;
+                    previewImage.style.display = 'block';
+                } else if (ext === 'pdf') {
+                    previewIframe.src = `/static/uploads/${currentAttachment}`;
+                    previewIframe.style.display = 'block';
+                } else if (ext === 'txt') {
+                    fetch(`/static/uploads/${currentAttachment}`)
+                        .then(response => response.text())
+                        .then(text => {
+                            previewText.textContent = text;
+                            previewText.style.display = 'block';
+                        })
+                        .catch(() => {
+                            previewText.textContent = 'Ошибка предпросмотра';
+                            previewText.style.display = 'block';
+                        });
+                } else {
+                    previewText.textContent = 'Предпросмотр недоступен';
+                    previewText.style.display = 'block';
+                }
+            }
+        }
+
+        function previewFile(input) {
+            const file = input.files[0];
+            const previewContainer = document.getElementById('previewContainer');
+            const previewImage = document.getElementById('previewImage');
+            const previewIframe = document.getElementById('previewIframe');
+            const previewText = document.getElementById('previewText');
+            previewContainer.style.display = 'none';
+            previewImage.style.display = 'none';
+            previewIframe.style.display = 'none';
+            previewText.style.display = 'none';
+            if (file) {
+                const ext = file.name.split('.').pop().toLowerCase();
+                previewContainer.style.display = 'block';
+                if (['jpeg', 'jpg', 'png'].includes(ext)) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewImage.src = e.target.result;
+                        previewImage.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                } else if (ext === 'pdf') {
+                    previewIframe.src = URL.createObjectURL(file);
+                    previewIframe.style.display = 'block';
+                } else if (ext === 'txt') {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewText.textContent = e.target.result;
+                        previewText.style.display = 'block';
+                    };
+                    reader.readAsText(file);
+                } else {
+                    previewText.textContent = 'Предпросмотр недоступен';
+                    previewText.style.display = 'block';
+                }
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('trackModal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

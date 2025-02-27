@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZaprosBot - аналитика</title>
+    <link rel="icon" type="image/icon" href="static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="{{ url_for('static', filename='custom.css') }}" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-r from-blue-50 to-indigo-100 font-sans min-h-screen">
+    <div class="container mx-auto p-6">
+        <header class="bg-white shadow-lg rounded-lg p-6 mb-6 flex items-center justify-between">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Pinscher Sales Logo" class="h-12 w-auto">
+            <a href="{{ url_for('index') }}" class="text-indigo-600 hover:text-indigo-800 font-medium">Назад</a>
+        </header>
+        <div class="bg-white shadow-lg rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Статистика по статусам (Оригиналы)</h2>
+            <table class="min-w-full divide-y divide-gray-200 stylish-table">
+                <thead class="bg-indigo-600 text-white">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Статус</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Количество</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for stat in stats_requests %}
+                    <tr class="hover:bg-indigo-50 transition duration-150">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ stat[0] }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ stat[1] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="bg-white shadow-lg rounded-lg p-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Статистика по статусам (Электронные)</h2>
+            <table class="min-w-full divide-y divide-gray-200 stylish-table">
+                <thead class="bg-indigo-600 text-white">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Статус</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Количество</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for stat in stats_electronic %}
+                    <tr class="hover:bg-indigo-50 transition duration-150">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ stat[0] }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ stat[1] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
